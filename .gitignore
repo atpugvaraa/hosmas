@@ -1,0 +1,15 @@
+.DS_Store
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+
+# Injected at init, never committed. See Secrets.example.swift.
+hosmas/Secrets.swift
+
+# Raw captures — live tokens and PII.
+Captures/
+*.proxymanlog
+*.proxymanlogv2
+*.har
