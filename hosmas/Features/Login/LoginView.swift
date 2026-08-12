@@ -16,16 +16,23 @@ struct LoginView: View {
     @Bindable var model: LoginModel
     @FocusState private var focus: Field?
 
-    private enum Field { case phone, residentOTP, canteenOTP }
+    private enum Field { case phone, residentOTP }
 
     var body: some View {
         Form {
-            Section("Phone") {
-                TextField("10-digit number", text: $model.phoneNumber)
-                    .keyboardType(.numberPad)
-                    .textContentType(.telephoneNumber)
+            Section {
+                TextField("Phone number or email", text: $model.identifier)
+                    .keyboardType(.emailAddress)
+                    .textContentType(.username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                     .focused($focus, equals: .phone)
                     .disabled(model.step != .phone)
+            } header: {
+                Text("Sign in")
+            } footer: {
+                // Some hostels are tagged to a college email, not the phone.
+                Text("Use whichever your hostel account is under.")
             }
 
             switch model.step {
@@ -38,19 +45,7 @@ struct LoginView: View {
                 } header: {
                     Text("Hostel code")
                 } footer: {
-                    Text("Sent by Fretbox to ••••\(model.phoneNumber.suffix(4)).")
-                }
-
-            case .canteenOTP:
-                Section {
-                    TextField("Code", text: $model.canteenOTP)
-                        .keyboardType(.numberPad)
-                        .textContentType(.oneTimeCode)
-                        .focused($focus, equals: .canteenOTP)
-                } header: {
-                    Text("Canteen code")
-                } footer: {
-                    Text("Hostel sign-in done. HungerBox sent a second code to \(model.canteenOTPDestination ?? "your phone").")
+                    Text("Sent by Fretbox to \(model.loginIdentifier.masked).")
                 }
 
             case .phone, .done:
@@ -66,14 +61,6 @@ struct LoginView: View {
                     Task { await primaryAction() }
                 }
                 .disabled(model.isBusy || !isPrimaryEnabled)
-
-                if model.step == .canteenOTP {
-                    Button("Skip canteen for now") {
-                        Task { await model.skipCanteen() }
-                    }
-                    .foregroundStyle(.secondary)
-                    .disabled(model.isBusy)
-                }
             }
         }
         .animation(.default, value: model.step)
@@ -82,7 +69,6 @@ struct LoginView: View {
             // Move the caret to whichever code was just requested.
             switch step {
             case .residentOTP: focus = .residentOTP
-            case .canteenOTP: focus = .canteenOTP
             case .phone: focus = .phone
             case .done: focus = nil
             }
@@ -93,16 +79,14 @@ struct LoginView: View {
         switch model.step {
         case .phone: "Send Code"
         case .residentOTP: "Verify Hostel Code"
-        case .canteenOTP: "Verify Canteen Code"
         case .done: "Done"
         }
     }
 
     private var isPrimaryEnabled: Bool {
         switch model.step {
-        case .phone: model.phoneNumber.count >= 10
+        case .phone: model.loginIdentifier.isPlausible
         case .residentOTP: !model.residentOTP.isEmpty
-        case .canteenOTP: !model.canteenOTP.isEmpty
         case .done: false
         }
     }
@@ -111,7 +95,6 @@ struct LoginView: View {
         switch model.step {
         case .phone: await model.sendResidentOTP()
         case .residentOTP: await model.verifyResidentOTP()
-        case .canteenOTP: await model.verifyCanteenOTP()
         case .done: break
         }
     }

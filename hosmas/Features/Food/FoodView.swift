@@ -11,6 +11,7 @@ import HosKhas
 
 struct FoodView: View {
     @Bindable var model: FoodModel
+    @Bindable var login: CanteenLoginModel
     @Environment(AppEnvironment.self) private var environment
     /// Built on tap rather than up front — checkout reads a live cart, so it
     /// should not be loading one behind the menu.
@@ -18,6 +19,19 @@ struct FoodView: View {
     @State private var isCheckingOut = false
 
     var body: some View {
+        if login.isSignedIn {
+            menu
+                // Load once signed in, and again the moment sign-in completes.
+                .task(id: login.isSignedIn) { await model.load() }
+        } else {
+            NavigationStack {
+                CanteenSignInView(login: login)
+                    .navigationTitle("Food")
+            }
+        }
+    }
+
+    private var menu: some View {
         NavigationStack {
             List {
                 if !model.occasions.isEmpty {
@@ -97,7 +111,6 @@ struct FoodView: View {
                 Task { await model.refreshCart() }
             }
             .refreshable { await model.load() }
-            .task { await model.load() }
         }
     }
 

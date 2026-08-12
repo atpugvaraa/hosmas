@@ -12,33 +12,50 @@ import HosKhas
 
 struct OrdersView: View {
     @Bindable var model: OrdersModel
+    @Bindable var login: CanteenLoginModel
 
     var body: some View {
         NavigationStack {
-            List(model.orders, id: \.orderRef) { order in
-                OrderRow(order: order)
-            }
-            .overlay {
-                if model.isLoading && model.orders.isEmpty {
-                    ProgressView()
-                } else if let errorMessage = model.errorMessage, model.orders.isEmpty {
+            Group {
+                if login.isSignedIn {
+                    orderList
+                } else {
+                    // Canteen sign-in lives on the Food tab; point there rather
+                    // than duplicating the flow.
                     ContentUnavailableView(
-                        "Couldn't load orders",
+                        "Canteen not connected",
                         systemImage: "bag",
-                        description: Text(errorMessage)
-                    )
-                } else if !model.isLoading && model.orders.isEmpty {
-                    ContentUnavailableView(
-                        "No orders yet",
-                        systemImage: "bag",
-                        description: Text("Orders you place show up here.")
+                        description: Text("Sign in to the canteen from the Food tab to see your orders.")
                     )
                 }
             }
             .navigationTitle("Orders")
-            .refreshable { await model.load() }
-            .task { await model.load() }
         }
+    }
+
+    private var orderList: some View {
+        List(model.orders, id: \.orderRef) { order in
+            OrderRow(order: order)
+        }
+        .overlay {
+            if model.isLoading && model.orders.isEmpty {
+                ProgressView()
+            } else if let errorMessage = model.errorMessage, model.orders.isEmpty {
+                ContentUnavailableView(
+                    "Couldn't load orders",
+                    systemImage: "bag",
+                    description: Text(errorMessage)
+                )
+            } else if !model.isLoading && model.orders.isEmpty {
+                ContentUnavailableView(
+                    "No orders yet",
+                    systemImage: "bag",
+                    description: Text("Orders you place show up here.")
+                )
+            }
+        }
+        .refreshable { await model.load() }
+        .task(id: login.isSignedIn) { await model.load() }
     }
 }
 

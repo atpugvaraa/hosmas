@@ -4,6 +4,9 @@
 //
 //  Decides login vs content, and hosts the captcha sheet the provider asks for.
 //
+//  Hostel sign-in gates the app. The canteen signs in separately from the Food
+//  tab, so a HungerBox that is down or changed never blocks the hostel side.
+//
 
 import SwiftUI
 import HosKhas
@@ -14,6 +17,7 @@ struct RootView: View {
     @State private var profile: ProfileModel?
     @State private var food: FoodModel?
     @State private var orders: OrdersModel?
+    @State private var canteenLogin: CanteenLoginModel?
 
     var body: some View {
         Group {
@@ -22,7 +26,7 @@ struct RootView: View {
                 ProgressView()
             case .done:
                 signedIn
-            case .phone, .residentOTP, .canteenOTP:
+            case .phone, .residentOTP:
                 if let login {
                     LoginView(model: login)
                 }
@@ -33,7 +37,12 @@ struct RootView: View {
             profile = ProfileModel(service: environment.resident)
             food = FoodModel(service: environment.canteen)
             orders = OrdersModel(service: environment.canteen)
-            let model = LoginModel(resident: environment.resident, canteen: environment.canteen)
+
+            let canteenModel = CanteenLoginModel(service: environment.canteen)
+            await canteenModel.restore()
+            canteenLogin = canteenModel
+
+            let model = LoginModel(resident: environment.resident)
             await model.restore()
             login = model
         }
@@ -55,12 +64,12 @@ struct RootView: View {
                 ProfileView(model: profile) { signOut() }
                     .tabItem { Label("Profile", systemImage: "person.crop.circle") }
             }
-            if let food {
-                FoodView(model: food)
+            if let food, let canteenLogin {
+                FoodView(model: food, login: canteenLogin)
                     .tabItem { Label("Food", systemImage: "fork.knife") }
             }
-            if let orders {
-                OrdersView(model: orders)
+            if let orders, let canteenLogin {
+                OrdersView(model: orders, login: canteenLogin)
                     .tabItem { Label("Orders", systemImage: "bag") }
             }
         }
@@ -68,9 +77,9 @@ struct RootView: View {
 
     private func signOut() {
         Task {
-            // Both sessions go — they were established together and a half
-            // signed-out state has nothing to show.
-            try? await environment.canteen.logout()
+            // Hostel sign-out also drops the canteen — a half signed-out app has
+            // nothing coherent to show.
+            await canteenLogin?.signOut()
             login?.reset()
         }
     }
