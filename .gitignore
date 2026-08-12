@@ -13,3 +13,7 @@ Captures/
 *.proxymanlog
 *.proxymanlogv2
 *.har
+
+# Repo digests — generated dumps that would inline Secrets.swift.
+digest.txt
+*digest*.txt

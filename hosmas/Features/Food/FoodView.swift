@@ -11,6 +11,11 @@ import HosKhas
 
 struct FoodView: View {
     @Bindable var model: FoodModel
+    @Environment(AppEnvironment.self) private var environment
+    /// Built on tap rather than up front — checkout reads a live cart, so it
+    /// should not be loading one behind the menu.
+    @State private var checkout: CheckoutModel?
+    @State private var isCheckingOut = false
 
     var body: some View {
         NavigationStack {
@@ -28,10 +33,24 @@ struct FoodView: View {
                     }
                 }
 
+                if let cartMessage = model.cartMessage {
+                    Section {
+                        Label(cartMessage, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.red)
+                    }
+                }
+
                 ForEach(model.visibleSections) { section in
                     Section(section.title) {
                         ForEach(section.items) { item in
-                            MenuRow(item: item)
+                            MenuRow(
+                                item: item,
+                                quantity: model.quantity(for: item),
+                                isPending: model.isPending(item),
+                                canIncrease: model.canIncrease(item),
+                                onAdd: { Task { await model.add(item) } },
+                                onRemove: { Task { await model.decrement(item) } }
+                            )
                         }
                     }
                 }
@@ -55,6 +74,28 @@ struct FoodView: View {
                 }
             }
             .navigationTitle("Food")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        checkout = CheckoutModel(service: environment.canteen)
+                        isCheckingOut = true
+                    } label: {
+                        Label("Cart", systemImage: "cart")
+                    }
+                    .badge(model.cartItemCount)
+                }
+            }
+            .sheet(isPresented: $isCheckingOut) {
+                if let checkout {
+                    CheckoutView(model: checkout)
+                }
+            }
+            .onChange(of: isCheckingOut) { _, presenting in
+                // Placing an order consumes the cart, so the badge is stale the
+                // moment checkout closes.
+                guard !presenting else { return }
+                Task { await model.refreshCart() }
+            }
             .refreshable { await model.load() }
             .task { await model.load() }
         }
@@ -77,6 +118,11 @@ struct FoodView: View {
 
 private struct MenuRow: View {
     let item: MenuItem
+    let quantity: Int
+    let isPending: Bool
+    let canIncrease: Bool
+    let onAdd: () -> Void
+    let onRemove: () -> Void
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -93,8 +139,59 @@ private struct MenuRow: View {
             }
 
             Spacer(minLength: 8)
-            price
+
+            VStack(alignment: .trailing, spacing: 4) {
+                price
+                stepper
+            }
         }
+        // The quantity shown is whatever the backend last reported, so it can
+        // change without this row being touched.
+        .animation(.default, value: quantity)
+    }
+
+    @ViewBuilder
+    private var stepper: some View {
+        if item.amount == nil {
+            // Without a price there is no valid mutation body to send.
+            EmptyView()
+        } else if quantity == 0 {
+            Button(action: onAdd) {
+                Text("Add").font(.subheadline.weight(.medium))
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .controlSize(.small)
+            .disabled(isPending)
+        } else {
+            HStack(spacing: 12) {
+                stepperButton("minus", action: onRemove, enabled: true)
+                Text("\(quantity)")
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .frame(minWidth: 16)
+                stepperButton("plus", action: onAdd, enabled: canIncrease)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.tint.opacity(0.12), in: Capsule())
+            .overlay {
+                if isPending { ProgressView().controlSize(.mini) }
+            }
+            .opacity(isPending ? 0.4 : 1)
+        }
+    }
+
+    private func stepperButton(_ symbol: String, action: @escaping () -> Void, enabled: Bool) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.caption.weight(.bold))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(enabled ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+        // Rows live in a List, so the tap has to stay on the button.
+        .buttonRepeatBehavior(.disabled)
+        .disabled(!enabled || isPending)
     }
 
     @ViewBuilder

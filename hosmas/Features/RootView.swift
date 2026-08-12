@@ -13,6 +13,7 @@ struct RootView: View {
     @State private var login: LoginModel?
     @State private var profile: ProfileModel?
     @State private var food: FoodModel?
+    @State private var orders: OrdersModel?
 
     var body: some View {
         Group {
@@ -31,6 +32,7 @@ struct RootView: View {
             guard login == nil else { return }
             profile = ProfileModel(service: environment.resident)
             food = FoodModel(service: environment.canteen)
+            orders = OrdersModel(service: environment.canteen)
             let model = LoginModel(resident: environment.resident, canteen: environment.canteen)
             await model.restore()
             login = model
@@ -56,6 +58,10 @@ struct RootView: View {
             if let food {
                 FoodView(model: food)
                     .tabItem { Label("Food", systemImage: "fork.knife") }
+            }
+            if let orders {
+                OrdersView(model: orders)
+                    .tabItem { Label("Orders", systemImage: "bag") }
             }
         }
     }
